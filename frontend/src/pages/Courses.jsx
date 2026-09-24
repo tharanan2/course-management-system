@@ -5,6 +5,41 @@ import Navbar from "../components/Navbar";
 import Footer from "../components/Footer";
 import CourseCard from "../components/CourseCard";
 
+function matchesCourseId(courseId, searchTerm) {
+  const id = String(courseId ?? "").trim().toLowerCase();
+  const term = searchTerm.trim().toLowerCase();
+
+  if (!term || id === term) {
+    return true;
+  }
+
+  const formattedCourseId = term.match(/^c(\d+)$/);
+  return Boolean(
+    formattedCourseId &&
+    Number.isFinite(Number(id)) &&
+    Number(id) === Number(formattedCourseId[1])
+  );
+}
+
+function parseDurationToDays(duration) {
+  const match = String(duration ?? "").trim().toLowerCase().match(
+    /^(\d+(?:\.\d+)?)\s*(hours?|days?|weeks?|months?|years?)?/
+  );
+
+  if (!match) {
+    return Number.POSITIVE_INFINITY;
+  }
+
+  const value = Number(match[1]);
+  const unit = match[2] || "days";
+
+  if (unit.startsWith("hour")) return value / 24;
+  if (unit.startsWith("week")) return value * 7;
+  if (unit.startsWith("month")) return value * 30;
+  if (unit.startsWith("year")) return value * 365;
+  return value;
+}
+
 function Courses() {
   const [courses, setCourses] = useState([]);
 
@@ -17,6 +52,8 @@ function Courses() {
   const [selectedLevel, setSelectedLevel] = useState("All");
   const [minPrice, setMinPrice] = useState("");
   const [maxPrice, setMaxPrice] = useState("");
+  const [sortBy, setSortBy] = useState("");
+  const [sortDirection, setSortDirection] = useState("asc");
 
   // ---------- Load courses from the backend ----------
   useEffect(() => {
@@ -61,6 +98,7 @@ function Courses() {
   const filteredCourses = courses.filter((course) => {
     // Safely convert potentially null/undefined values to strings
     const title = String(course.title || "");
+    const courseId = String(course.id || "");
     const category = String(course.category || "");
     const level = String(course.level || "");
     const description = String(course.description || "");
@@ -71,6 +109,7 @@ function Courses() {
     // Search title, category, level, description and duration
     const matchesSearch =
       !search ||
+      matchesCourseId(courseId, search) ||
       title.toLowerCase().includes(search) ||
       category.toLowerCase().includes(search) ||
       level.toLowerCase().includes(search) ||
@@ -112,13 +151,31 @@ function Courses() {
     );
   });
 
+  const sortedCourses = [...filteredCourses].sort((firstCourse, secondCourse) => {
+    if (!sortBy) {
+      return 0;
+    }
+
+    const firstValue = sortBy === "price"
+      ? Number(firstCourse.price)
+      : parseDurationToDays(firstCourse.duration);
+    const secondValue = sortBy === "price"
+      ? Number(secondCourse.price)
+      : parseDurationToDays(secondCourse.duration);
+    const difference = firstValue - secondValue;
+
+    return sortDirection === "desc" ? -difference : difference;
+  });
+
   // ---------- Check whether any filter is active ----------
   const hasActiveFilters =
     searchText.trim() !== "" ||
     selectedCategory !== "All" ||
     selectedLevel !== "All" ||
     minPrice !== "" ||
-    maxPrice !== "";
+    maxPrice !== "" ||
+    sortBy !== "" ||
+    sortDirection !== "asc";
 
   // ---------- Clear all filters ----------
   const clearAllFilters = () => {
@@ -127,6 +184,8 @@ function Courses() {
     setSelectedLevel("All");
     setMinPrice("");
     setMaxPrice("");
+    setSortBy("");
+    setSortDirection("asc");
   };
 
   return (
@@ -149,69 +208,117 @@ function Courses() {
         {!loading && !error && courses.length > 0 && (
           <div className="filter-bar">
             {/* Search */}
-            <input
-              type="text"
-              className="input"
-              placeholder="Search by title, category, level, description or duration..."
-              value={searchText}
-              onChange={(event) =>
-                setSearchText(event.target.value)
-              }
-            />
+            <div className="filter-field filter-search-field">
+              <label htmlFor="courseSearch">Search courses</label>
+              <input
+                id="courseSearch"
+                type="text"
+                className="input"
+                placeholder="Search by course ID, title, category, level, description or duration..."
+                value={searchText}
+                onChange={(event) =>
+                  setSearchText(event.target.value)
+                }
+              />
+            </div>
 
             {/* Category */}
-            <select
-              className="input"
-              value={selectedCategory}
-              onChange={(event) =>
-                setSelectedCategory(event.target.value)
-              }
-            >
-              {categories.map((category) => (
-                <option key={category} value={category}>
-                  {category}
-                </option>
-              ))}
-            </select>
+            <div className="filter-field">
+              <label htmlFor="categoryFilter">Category</label>
+              <select
+                id="categoryFilter"
+                className="input"
+                value={selectedCategory}
+                onChange={(event) =>
+                  setSelectedCategory(event.target.value)
+                }
+              >
+                {categories.map((category) => (
+                  <option key={category} value={category}>
+                    {category}
+                  </option>
+                ))}
+              </select>
+            </div>
 
             {/* Level */}
-            <select
-              className="input"
-              value={selectedLevel}
-              onChange={(event) =>
-                setSelectedLevel(event.target.value)
-              }
-            >
-              {levels.map((level) => (
-                <option key={level} value={level}>
-                  {level === "All" ? "All Levels" : level}
-                </option>
-              ))}
-            </select>
+            <div className="filter-field">
+              <label htmlFor="levelFilter">Level</label>
+              <select
+                id="levelFilter"
+                className="input"
+                value={selectedLevel}
+                onChange={(event) =>
+                  setSelectedLevel(event.target.value)
+                }
+              >
+                {levels.map((level) => (
+                  <option key={level} value={level}>
+                    {level === "All" ? "All Levels" : level}
+                  </option>
+                ))}
+              </select>
+            </div>
 
             {/* Minimum price */}
-            <input
-              type="number"
-              className="input"
-              placeholder="Minimum price"
-              min="0"
-              value={minPrice}
-              onChange={(event) =>
-                setMinPrice(event.target.value)
-              }
-            />
+            <div className="filter-field price-field">
+              <label htmlFor="minimumPrice">Minimum price</label>
+              <input
+                id="minimumPrice"
+                type="number"
+                className="input"
+                placeholder="Minimum price"
+                min="0"
+                value={minPrice}
+                onChange={(event) =>
+                  setMinPrice(event.target.value)
+                }
+              />
+            </div>
+
+            {/* Price sorting */}
+            <div className="filter-field">
+              <label htmlFor="sortBy">Sort by</label>
+              <select
+                id="sortBy"
+                className="input"
+                value={sortBy}
+                onChange={(event) => setSortBy(event.target.value)}
+              >
+                <option value="">Sort by...</option>
+                <option value="price">Price</option>
+                <option value="duration">Duration</option>
+              </select>
+            </div>
+
+            <div className="filter-field">
+              <label htmlFor="sortDirection">Sort direction</label>
+              <select
+                id="sortDirection"
+                className="input"
+                value={sortDirection}
+                onChange={(event) => setSortDirection(event.target.value)}
+              >
+                <option value="asc">Ascending</option>
+                <option value="desc">Descending</option>
+              </select>
+            </div>
 
             {/* Maximum price */}
-            <input
-              type="number"
-              className="input"
-              placeholder="Maximum price"
-              min="0"
-              value={maxPrice}
-              onChange={(event) =>
-                setMaxPrice(event.target.value)
-              }
-            />
+            <div className="filter-field price-field">
+              <label htmlFor="maximumPrice">Maximum price</label>
+              <input
+                id="maximumPrice"
+                type="number"
+                className="input"
+                placeholder="Maximum price"
+                min="0"
+                value={maxPrice}
+                onChange={(event) =>
+                  setMaxPrice(event.target.value)
+                }
+              />
+            </div>
 
             {/* Clear filters */}
             {hasActiveFilters && (
@@ -310,15 +417,20 @@ function Courses() {
         {!loading &&
           !error &&
           courses.length > 0 &&
-          filteredCourses.length > 0 && (
+          sortedCourses.length > 0 && (
             <>
               <p className="result-count">
-                Showing {filteredCourses.length} of{" "}
+                Showing {sortedCourses.length} of{" "}
                 {courses.length} courses
+                {sortBy && (
+                  <span>
+                    {" "}| Sorted by {sortBy} ({sortDirection === "asc" ? "ascending" : "descending"})
+                  </span>
+                )}
               </p>
 
               <div className="course-grid">
-                {filteredCourses.map((course) => (
+                {sortedCourses.map((course) => (
                   <CourseCard
                     key={course.id}
                     course={course}

@@ -26,6 +26,41 @@ const EMPTY_COURSE = {
 
 const LEVEL_OPTIONS = ["Beginner", "Intermediate", "Advanced"];
 
+function matchesCourseId(courseId, searchTerm) {
+  const id = String(courseId ?? "").trim().toLowerCase();
+  const term = searchTerm.trim().toLowerCase();
+
+  if (!term) {
+    return true;
+  }
+
+  if (id === term) {
+    return true;
+  }
+
+  const formattedCourseId = term.match(/^c(\d+)$/);
+  const numericCourseId = Number(id);
+  const normalizedCourseIdSearch = formattedCourseId
+    ? Number(formattedCourseId[1])
+    : NaN;
+
+  return Number.isFinite(normalizedCourseIdSearch) &&
+    Number.isFinite(numericCourseId) &&
+    numericCourseId === normalizedCourseIdSearch;
+}
+
+function compareCourses(firstCourse, secondCourse, column) {
+  if (column === "id" || column === "price") {
+    return Number(firstCourse[column]) - Number(secondCourse[column]);
+  }
+
+  return String(firstCourse[column] ?? "").localeCompare(
+    String(secondCourse[column] ?? ""),
+    undefined,
+    { sensitivity: "base", numeric: true }
+  );
+}
+
 
 // Load the course list.
 async function fetchAllCourses() {
@@ -38,6 +73,11 @@ async function fetchAllCourses() {
 function ManageCourses() {
 
   const [courses, setCourses] = useState([]);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [selectedCategory, setSelectedCategory] = useState("All");
+  const [selectedLevel, setSelectedLevel] = useState("All");
+  const [sortColumn, setSortColumn] = useState("");
+  const [sortDirection, setSortDirection] = useState("asc");
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -84,6 +124,64 @@ function ManageCourses() {
   // ---------- Reload the list after a create / update / delete ----------
   const refreshCourses = async () => {
     setCourses(await fetchAllCourses());
+  };
+
+  const categories = [
+    "All",
+    ...Array.from(
+      new Set(courses.map((course) => course.category).filter(Boolean))
+    ).sort((firstCategory, secondCategory) =>
+      firstCategory.localeCompare(secondCategory, undefined, {
+        sensitivity: "base",
+      })
+    ),
+  ];
+
+  const filteredCourses = courses.filter((course) => {
+    const search = searchTerm.trim().toLowerCase();
+    const matchesText =
+      !search ||
+      String(course.title || "").toLowerCase().includes(search) ||
+      String(course.category || "").toLowerCase().includes(search) ||
+      matchesCourseId(course.id, search);
+    const matchesCategory =
+      selectedCategory === "All" || course.category === selectedCategory;
+    const matchesLevel =
+      selectedLevel === "All" || course.level === selectedLevel;
+
+    return matchesText && matchesCategory && matchesLevel;
+  });
+
+  const sortedCourses = [...filteredCourses].sort((firstCourse, secondCourse) => {
+    if (!sortColumn) return 0;
+
+    const comparison = compareCourses(firstCourse, secondCourse, sortColumn);
+    return sortDirection === "asc" ? comparison : -comparison;
+  });
+
+  const handleSort = (column) => {
+    if (sortColumn === column) {
+      setSortDirection((currentDirection) =>
+        currentDirection === "asc" ? "desc" : "asc"
+      );
+      return;
+    }
+
+    setSortColumn(column);
+    setSortDirection("asc");
+  };
+
+  const handleResetFilters = () => {
+    setSearchTerm("");
+    setSelectedCategory("All");
+    setSelectedLevel("All");
+    setSortColumn("");
+    setSortDirection("asc");
+  };
+
+  const renderSortIndicator = (column) => {
+    if (sortColumn !== column) return "↕";
+    return sortDirection === "asc" ? "↑" : "↓";
   };
 
 
@@ -309,6 +407,65 @@ function ManageCourses() {
 
         {error && <p className="error">{error}</p>}
 
+        {!loading && courses.length > 0 && (
+          <div className="filter-bar filter-bar-admin">
+            <div className="form-group">
+              <label htmlFor="courseSearch">Search</label>
+              <input
+                id="courseSearch"
+                type="text"
+                className="input"
+                placeholder="Search by title, category, or course ID..."
+                value={searchTerm}
+                onChange={(event) => setSearchTerm(event.target.value)}
+              />
+            </div>
+
+            <div className="form-group">
+              <label htmlFor="categoryFilter">Category</label>
+              <select
+                id="categoryFilter"
+                className="input"
+                value={selectedCategory}
+                onChange={(event) => setSelectedCategory(event.target.value)}
+              >
+                {categories.map((category) => (
+                  <option key={category} value={category}>
+                    {category}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="form-group">
+              <label htmlFor="levelFilter">Level</label>
+              <select
+                id="levelFilter"
+                className="input"
+                value={selectedLevel}
+                onChange={(event) => setSelectedLevel(event.target.value)}
+              >
+                <option value="All">All</option>
+                {LEVEL_OPTIONS.map((level) => (
+                  <option key={level} value={level}>
+                    {level}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="form-group filter-actions">
+              <button
+                type="button"
+                className="btn btn-outline"
+                onClick={handleResetFilters}
+              >
+                Reset Filters
+              </button>
+            </div>
+          </div>
+        )}
+
 
         {/* ---------- Add / Edit form ---------- */}
 
@@ -525,6 +682,16 @@ function ManageCourses() {
 
 
           {!loading && courses.length > 0 && (
+            <p className="result-count">
+              Showing {sortedCourses.length} of {courses.length} courses
+            </p>
+          )}
+
+          {!loading && courses.length > 0 && sortedCourses.length === 0 && (
+            <p className="empty">No courses found.</p>
+          )}
+
+          {!loading && sortedCourses.length > 0 && (
 
             <div className="table-wrapper">
 
@@ -532,20 +699,44 @@ function ManageCourses() {
 
                 <thead>
                   <tr>
-                    <th>ID</th>
+                    <th>
+                      <button type="button" className="table-sort-button" onClick={() => handleSort("id")}>
+                        ID {renderSortIndicator("id")}
+                      </button>
+                    </th>
                     <th>Image</th>
-                    <th>Title</th>
-                    <th>Category</th>
-                    <th>Level</th>
-                    <th>Duration</th>
-                    <th>Price</th>
+                    <th>
+                      <button type="button" className="table-sort-button" onClick={() => handleSort("title")}>
+                        Title {renderSortIndicator("title")}
+                      </button>
+                    </th>
+                    <th>
+                      <button type="button" className="table-sort-button" onClick={() => handleSort("category")}>
+                        Category {renderSortIndicator("category")}
+                      </button>
+                    </th>
+                    <th>
+                      <button type="button" className="table-sort-button" onClick={() => handleSort("level")}>
+                        Level {renderSortIndicator("level")}
+                      </button>
+                    </th>
+                    <th>
+                      <button type="button" className="table-sort-button" onClick={() => handleSort("duration")}>
+                        Duration {renderSortIndicator("duration")}
+                      </button>
+                    </th>
+                    <th>
+                      <button type="button" className="table-sort-button" onClick={() => handleSort("price")}>
+                        Price {renderSortIndicator("price")}
+                      </button>
+                    </th>
                     <th className="table-actions-column">Actions</th>
                   </tr>
                 </thead>
 
                 <tbody>
 
-                  {courses.map((course) => (
+                  {sortedCourses.map((course) => (
 
                     <tr key={course.id}>
 
