@@ -810,6 +810,11 @@ textarea.input {
   outline: none;
 }
 
+.enrollment-sort {
+  width: min(100%, 280px);
+  margin: 0 0 16px auto;
+}
+
 .filter-search-field {
   flex-basis: 260px;
 }
