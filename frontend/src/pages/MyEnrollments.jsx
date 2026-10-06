@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { FaSearch } from "react-icons/fa";
+import { FaSearch, FaTrash } from "react-icons/fa";
 
 import api from "../services/api";
 import { getUser } from "../services/auth";
@@ -15,6 +15,8 @@ function MyEnrollments() {
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
+  const [cancellingId, setCancellingId] = useState(null);
 
   const user = getUser();
   const total = enrollments.reduce(
@@ -46,37 +48,67 @@ function MyEnrollments() {
   });
 
   // ---------- Load the logged-in student's enrollments ----------
+  const loadEnrollments = async () => {
+    setLoading(true);
+    setError("");
+
+    try {
+
+      const response = await api.get("/enrollments/my");
+
+      setEnrollments(
+        Array.isArray(response.data.enrollments)
+          ? response.data.enrollments
+          : []
+      );
+
+    } catch (error) {
+
+      setError(
+        error.response?.data?.message ||
+        "Failed to load your enrollments"
+      );
+
+    } finally {
+
+      setLoading(false);
+
+    }
+  };
+
   useEffect(() => {
-
-    const getEnrollments = async () => {
-
-      try {
-
-        const response = await api.get("/enrollments/my");
-
-        setEnrollments(
-          Array.isArray(response.data.enrollments)
-            ? response.data.enrollments
-            : []
-        );
-
-      } catch (error) {
-
-        setError(
-          error.response?.data?.message ||
-          "Failed to load your enrollments"
-        );
-
-      } finally {
-
-        setLoading(false);
-
-      }
-    };
-
-    getEnrollments();
-
+    loadEnrollments();
   }, []);
+
+  const handleCancelEnrollment = async (enrollmentId) => {
+    const confirmed = window.confirm(
+      "Are you sure you want to cancel this enrollment?"
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    setError("");
+    setSuccess("");
+    setCancellingId(enrollmentId);
+
+    try {
+      const response = await api.delete(`/enrollments/my/${enrollmentId}`);
+
+      setSuccess(response.data.message || "Enrollment cancelled successfully");
+      await loadEnrollments();
+
+    } catch (error) {
+      setError(
+        error.response?.data?.message ||
+        "Could not cancel this enrollment."
+      );
+
+    } finally {
+      setCancellingId(null);
+    }
+  };
 
 
   // Format "2026-09-21T10:15:00.000Z" into a readable date
@@ -138,6 +170,10 @@ function MyEnrollments() {
 
 
         {/* ---------- Error ---------- */}
+
+        {success && !loading && (
+          <p className="success">{success}</p>
+        )}
 
         {error && !loading && (
           <p className="error">{error}</p>
@@ -237,12 +273,26 @@ function MyEnrollments() {
                   </ul>
 
 
-                  <Link
-                    to={`/courses/${enrollment.course_id}`}
-                    className="btn btn-outline btn-block"
-                  >
-                    View Course
-                  </Link>
+                  <div className="course-card-actions">
+                    <Link
+                      to={`/courses/${enrollment.course_id}`}
+                      className="btn btn-outline btn-block"
+                    >
+                      View Course
+                    </Link>
+
+                    <button
+                      type="button"
+                      className="btn btn-danger btn-block"
+                      onClick={() => handleCancelEnrollment(enrollment.id)}
+                      disabled={cancellingId === enrollment.id}
+                    >
+                      <FaTrash />
+                      {cancellingId === enrollment.id
+                        ? "Cancelling..."
+                        : "Cancel Enrollment"}
+                    </button>
+                  </div>
 
                 </div>
 

@@ -644,6 +644,12 @@ a:hover {
   margin-bottom: 4px;
 }
 
+.course-card-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
 
 /* =========================================
    9. Tags / badges
