@@ -22,6 +22,14 @@ function CourseDetails() {
   const [enrolling, setEnrolling] = useState(false);
   const [enrolled, setEnrolled] = useState(false);
 
+  const availabilityText = course
+    ? (course.max_students === null || course.max_students === undefined
+      ? "Unlimited"
+      : course.is_full
+        ? "Course Full"
+        : `${course.enrolled_count ?? 0} / ${course.max_students} students`)
+    : "";
+
 
   // Read the login state from localStorage.
   const loggedIn = isLoggedIn();
@@ -213,6 +221,11 @@ function CourseDetails() {
                 <dd className="details-price">Rs. {course.price}</dd>
               </div>
 
+              <div>
+                <dt>Availability</dt>
+                <dd>{availabilityText}</dd>
+              </div>
+
             </dl>
 
 
@@ -250,12 +263,14 @@ function CourseDetails() {
               {/* Logged in as a student: show the Enroll button */}
               {studentLoggedIn && (
                 <>
-                  {!enrolled ? (
+                  {course.is_full && !enrolled ? (
+                    <p className="error">Course Full. No remaining seats are available.</p>
+                  ) : !enrolled ? (
                     <button
                       type="button"
                       className="btn btn-primary btn-lg"
                       onClick={handleEnroll}
-                      disabled={enrolling}
+                      disabled={enrolling || course.is_full}
                     >
                       <FaShoppingCart />
                       {enrolling ? "Enrolling..." : "Enroll Now"}

@@ -2,6 +2,27 @@ const Course = require("../models/courseModel");
 const User = require("../models/userModel");
 const validateCourse = require("../helpers/validateCourse");
 
+const ensureCapacityIsValidForUpdate = async (courseId, newMaxStudents) => {
+  if (newMaxStudents === null || newMaxStudents === undefined) {
+    return;
+  }
+
+  const currentCourse = await Course.getById(courseId);
+
+  if (!currentCourse) {
+    return;
+  }
+
+  const approvedEnrollmentCount = Number(currentCourse.enrolled_count ?? 0);
+
+  if (newMaxStudents < approvedEnrollmentCount) {
+    throw Object.assign(new Error("Maximum students cannot be lower than the current approved enrollment count"), {
+      statusCode: 400,
+      field: "max_students",
+    });
+  }
+};
+
 // Get all courses
 const getAllCourses = async (req, res) => {
   try {
@@ -104,7 +125,6 @@ const updateCourse = async (req, res) => {
       });
     }
 
-    // Check if course exists
     const existingCourse = await Course.getById(id);
 
     if (!existingCourse) {
@@ -124,9 +144,23 @@ const updateCourse = async (req, res) => {
       });
     }
 
+    try {
+      await ensureCapacityIsValidForUpdate(id, validation.data.max_students);
+    } catch (error) {
+      if (error?.statusCode === 400) {
+        return res.status(400).json({
+          message: "Validation failed",
+          errors: {
+            max_students: "Maximum students cannot be lower than the current approved enrollment count",
+          },
+        });
+      }
+
+      throw error;
+    }
+
     await Course.update(id, validation.data);
 
-    // Get updated course
     const updatedCourse = await Course.getById(id);
 
     res.status(200).json({
@@ -149,7 +183,6 @@ const deleteCourse = async (req, res) => {
   try {
     const { id } = req.params;
 
-    // Check if course exists
     const existingCourse = await Course.getById(id);
 
     if (!existingCourse) {

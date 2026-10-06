@@ -7,10 +7,31 @@ function trimValue(value) {
     return value;
   }
 
-  const str = value;
-  const trimmed = str.trim();
+  return value.trim();
+}
 
-  return trimmed;
+function normalizeOptionalPositiveInteger(value) {
+  if (value === undefined || value === null || value === "") {
+    return null;
+  }
+
+  const normalized = String(value).trim();
+
+  if (normalized === "") {
+    return null;
+  }
+
+  if (!/^(?:0|[1-9]\d*)$/.test(normalized)) {
+    return Number.NaN;
+  }
+
+  const numericValue = Number(normalized);
+
+  if (!Number.isInteger(numericValue) || numericValue <= 0) {
+    return Number.NaN;
+  }
+
+  return numericValue;
 }
 
 function validateCourse(course = {}) {
@@ -23,6 +44,8 @@ function validateCourse(course = {}) {
   const image = trimValue(course.image);
   const description = trimValue(course.description);
   const priceValue = trimValue(course.price);
+  const maxStudentsValue = course.max_students ?? course.maxStudents;
+  const maxStudents = normalizeOptionalPositiveInteger(maxStudentsValue);
   const errors = {};
 
   if (typeof title !== "string" || !title) {
@@ -71,6 +94,12 @@ function validateCourse(course = {}) {
     }
   }
 
+  if (maxStudentsValue !== undefined && maxStudentsValue !== null && maxStudentsValue !== "") {
+    if (Number.isNaN(maxStudents)) {
+      errors.max_students = "Maximum students must be a positive integer";
+    }
+  }
+
   if (image !== undefined && image !== null && typeof image !== "string") {
     errors.image = "Image must be a valid HTTP or HTTPS URL";
   } else if (image && image.length > 500) {
@@ -103,6 +132,7 @@ function validateCourse(course = {}) {
       price: Number(priceValue),
       image: image || null,
       description: description || null,
+      max_students: maxStudents,
     },
   };
 }

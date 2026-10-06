@@ -94,6 +94,18 @@ function Courses() {
     "Advanced",
   ];
 
+  const formatAvailability = (course) => {
+    if (course.max_students === null || course.max_students === undefined) {
+      return "Unlimited";
+    }
+
+    if (course.is_full) {
+      return "Course Full";
+    }
+
+    return `${course.enrolled_count ?? 0} / ${course.max_students} students`;
+  };
+
   // ---------- Apply all filters using AND logic ----------
   const filteredCourses = courses.filter((course) => {
     // Safely convert potentially null/undefined values to strings

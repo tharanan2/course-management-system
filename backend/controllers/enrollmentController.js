@@ -1,3 +1,4 @@
+const db = require("../config/db");
 const Enrollment = require("../models/enrollmentModel");
 const Course = require("../models/courseModel");
 
@@ -5,18 +6,14 @@ const Course = require("../models/courseModel");
 const enrollInCourse = async (req, res) => {
   try {
     const { courseId } = req.body;
-
-    // Logged-in student's ID
     const studentId = req.user.id;
 
-    // Check course ID
     if (!courseId) {
       return res.status(400).json({
         message: "Course ID is required",
       });
     }
 
-    // Check whether course exists
     const course = await Course.getById(courseId);
 
     if (!course) {
@@ -25,29 +22,79 @@ const enrollInCourse = async (req, res) => {
       });
     }
 
-    // Check whether student is already enrolled
-    const existingEnrollment =
-      await Enrollment.findByStudentAndCourse(
-        studentId,
-        courseId
+    const connection = await db.getConnection();
+
+    try {
+      await connection.beginTransaction();
+
+      const [courseRows] = await connection.execute(
+        "SELECT * FROM courses WHERE id = ? FOR UPDATE",
+        [courseId]
       );
 
-    if (existingEnrollment) {
-      return res.status(409).json({
-        message: "You are already enrolled in this course",
+      const lockedCourse = courseRows[0];
+
+      if (!lockedCourse) {
+        await connection.rollback();
+        return res.status(404).json({
+          message: "Course not found",
+        });
+      }
+
+      const existingEnrollment = await connection.execute(
+        `SELECT id
+         FROM enrollments
+         WHERE student_id = ?
+         AND course_id = ?
+         LIMIT 1`,
+        [studentId, courseId]
+      );
+
+      if (existingEnrollment[0].length > 0) {
+        await connection.rollback();
+        return res.status(409).json({
+          message: "You are already enrolled in this course",
+        });
+      }
+
+      const [countRows] = await connection.execute(
+        `SELECT COUNT(*) AS enrolled_count
+         FROM enrollments
+         WHERE course_id = ?`,
+        [courseId]
+      );
+
+      const enrolledCount = Number(countRows[0]?.enrolled_count ?? 0);
+      const maxStudents = lockedCourse.max_students === null || lockedCourse.max_students === undefined
+        ? null
+        : Number(lockedCourse.max_students);
+
+      if (maxStudents !== null && enrolledCount >= maxStudents) {
+        await connection.rollback();
+        return res.status(409).json({
+          message: "This course is full. No seats remaining.",
+        });
+      }
+
+      const [result] = await connection.execute(
+        `INSERT INTO enrollments
+         (student_id, course_id)
+         VALUES (?, ?)`,
+        [studentId, courseId]
+      );
+
+      await connection.commit();
+
+      res.status(201).json({
+        message: "Course enrollment successful",
+        enrollmentId: result.insertId,
       });
+    } catch (error) {
+      await connection.rollback();
+      throw error;
+    } finally {
+      connection.release();
     }
-
-    // Create enrollment
-    const enrollmentId = await Enrollment.create(
-      studentId,
-      courseId
-    );
-
-    res.status(201).json({
-      message: "Course enrollment successful",
-      enrollmentId,
-    });
 
   } catch (error) {
     console.error(
@@ -93,7 +140,6 @@ const getCourseEnrollments = async (req, res) => {
   try {
     const { courseId } = req.params;
 
-    // Check whether course exists
     const course = await Course.getById(courseId);
 
     if (!course) {

@@ -20,6 +20,7 @@ const EMPTY_COURSE = {
   level: "Beginner",
   duration: "",
   price: "",
+  max_students: "",
   image: "",
   description: "",
 };
@@ -225,6 +226,7 @@ function ManageCourses() {
       level: course.level || "Beginner",
       duration: course.duration || "",
       price: String(course.price ?? ""),
+      max_students: course.max_students === null || course.max_students === undefined ? "" : String(course.max_students),
       image: course.image || "",
       description: course.description || "",
     });
@@ -277,14 +279,25 @@ function ManageCourses() {
       return;
     }
 
+    if (
+      formData.max_students !== "" &&
+      (!Number.isInteger(Number(formData.max_students)) || Number(formData.max_students) <= 0)
+    ) {
+      setFormError("Maximum students must be a positive whole number when provided.");
+      return;
+    }
 
-    // The backend expects price to be a number
+    const normalizedMaxStudents = formData.max_students === ""
+      ? null
+      : Number(formData.max_students);
+
     const coursePayload = {
       title: formData.title.trim(),
       category: formData.category.trim(),
       level: formData.level,
       duration: formData.duration.trim(),
       price: Number(formData.price),
+      max_students: normalizedMaxStudents,
       image: formData.image.trim(),
       description: formData.description.trim(),
     };
@@ -583,6 +596,25 @@ function ManageCourses() {
 
               </div>
 
+              <div className="form-group">
+                <label htmlFor="max_students">Maximum Students</label>
+
+                <input
+                  id="max_students"
+                  className={`input${fieldErrors.max_students ? " input-error" : ""}`}
+                  type="number"
+                  min="1"
+                  step="1"
+                  name="max_students"
+                  value={formData.max_students}
+                  onChange={handleChange}
+                  placeholder="Leave blank for unlimited capacity"
+                  aria-invalid={Boolean(fieldErrors.max_students)}
+                  aria-describedby={fieldErrors.max_students ? "max-students-error" : undefined}
+                />
+                {fieldErrors.max_students && <p id="max-students-error" className="field-error">{fieldErrors.max_students}</p>}
+              </div>
+
 
               <div className="form-group">
                 <label htmlFor="image">Image URL</label>
@@ -730,6 +762,7 @@ function ManageCourses() {
                         Price {renderSortIndicator("price")}
                       </button>
                     </th>
+                    <th>Availability</th>
                     <th className="table-actions-column">Actions</th>
                   </tr>
                 </thead>
@@ -763,6 +796,14 @@ function ManageCourses() {
                       <td>{course.duration}</td>
 
                       <td>Rs. {course.price}</td>
+
+                      <td>
+                        {course.max_students === null || course.max_students === undefined
+                          ? "Unlimited"
+                          : course.is_full
+                            ? "Course Full"
+                            : `${course.enrolled_count ?? 0} / ${course.max_students} students`}
+                      </td>
 
                       <td>
                         <div className="table-actions">
